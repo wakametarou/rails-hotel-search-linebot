@@ -26,40 +26,50 @@ class LineBotController < ApplicationController
 
   private
  
-    def client
-      @client ||= Line::Bot::Client.new { |config|
-        config.channel_secret = ENV["LINE_CHANNEL_SECRET"]
-        config.channel_token = ENV["LINE_CHANNEL_TOKEN"]
+  def client
+    @client ||= Line::Bot::Client.new { |config|
+      config.channel_secret = ENV["LINE_CHANNEL_SECRET"]
+      config.channel_token = ENV["LINE_CHANNEL_TOKEN"]
+    }
+  end
+
+  def search_and_create_message(keyword)
+    http_client = HTTPClient.new
+    url = 'https://app.rakuten.co.jp/services/api/Travel/KeywordHotelSearch/20170426'
+      query = {
+        'keyword' => keyword,
+        'applicationId' => ENV['RAKUTEN_APPID'],
+        'hits' => 5,
+        'responseType' => 'small',
+        'datumType' => 1,
+        'formatVersion' => 2
+      }
+    response = http_client.get(url, query)
+    response = JSON.parse(response.body)
+    # p response['pagingInfo']
+
+    if response.key?('error')
+      text = "この検索条件に該当する宿泊施設が見つかりませんでした。\n条件を変えて再検索してくだい。"
+      {
+        type: 'text',
+        text: text
+      }
+    else
+      {
+        type: 'flex',
+        altText: '宿泊検索の結果です。',
+        contents: set_carousel(response['hotels'])
       }
     end
-
-    def search_and_create_message(keyword)
-      http_client = HTTPClient.new
-      url = 'https://app.rakuten.co.jp/services/api/Travel/KeywordHotelSearch/20170426'
-        query = {
-          'keyword' => keyword,
-          'applicationId' => ENV['RAKUTEN_APPID'],
-          'hits' => 5,
-          'responseType' => 'small',
-          'datumType' => 1,
-          'formatVersion' => 2
-        }
-      response = http_client.get(url, query)
-      response = JSON.parse(response.body)
-      # p response['pagingInfo']
-
-      if response.key?('error')
-        text = "この検索条件に該当する宿泊施設が見つかりませんでした。\n条件を変えて再検索してください。"
-        {
-          type: 'text',
-          text: text
-        }
-      else
-        {
-          type: 'flex',
-          altText: '宿泊検索の結果です。',
-          contents: set_carousel(response['hotels'])
-        }
-      end
+  end
+  def set_carousel(hotels)
+    bubbles = []
+    hotels.each do |hotel|
+      bubbles.push set_bubble(hotel[0]['hotelBasicInfo'])
     end
+    {
+      type: 'carousel',
+      contents: bubbles
+    }
+  end
 end
